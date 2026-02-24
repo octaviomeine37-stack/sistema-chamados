@@ -2,16 +2,9 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
-import os
 
-# CONFIG
 st.set_page_config(page_title="Sistema de Chamados", layout="wide")
 
-st.title("🎫 Sistema de Chamados")
-
-st.write("Banco salvo em:", os.getcwd())
-
-# BANCO
 conn = sqlite3.connect("chamados.db", check_same_thread=False)
 c = conn.cursor()
 
@@ -26,45 +19,48 @@ data TEXT
 )
 """)
 
-menu = st.sidebar.selectbox("Menu", ["Novo Chamado","Lista de Chamados"])
+st.title("🎫 Sistema de Chamados")
+
+params = st.query_params
+admin = params.get("admin") == "1"
+
+menu = ["Novo Chamado"]
+if admin:
+    menu.append("Lista de Chamados")
+
+opcao = st.sidebar.selectbox("Menu", menu)
 
 # NOVO
-if menu == "Novo Chamado":
-
-    nome = st.text_input("Solicitante")
+if opcao == "Novo Chamado":
+    nome = st.text_input("Seu nome")
     desc = st.text_area("Descrição")
     prio = st.selectbox("Prioridade",["Baixa","Média","Alta"])
 
     if st.button("Abrir Chamado"):
         if nome and desc:
             c.execute("""
-            INSERT INTO chamados (solicitante,descricao,prioridade,status,data)
+            INSERT INTO chamados
+            (solicitante,descricao,prioridade,status,data)
             VALUES (?,?,?,?,?)
             """,(nome,desc,prio,"Aberto",datetime.now()))
             conn.commit()
-            st.success("Chamado criado!")
+            st.success("Chamado enviado!")
         else:
             st.warning("Preencha tudo!")
 
-# LISTA
-if menu == "Lista de Chamados":
+# LISTA (só admin)
+if opcao == "Lista de Chamados":
     df = pd.read_sql("SELECT * FROM chamados ORDER BY id DESC", conn)
 
-    if df.empty:
-        st.info("Nenhum chamado ainda.")
-    else:
-        for i, row in df.iterrows():
-            st.write(f"### Chamado #{row['id']}")
-            st.write(f"👤 {row['solicitante']}")
-            st.write(f"📝 {row['descricao']}")
-            st.write(f"⚡ Prioridade: {row['prioridade']} | Status: {row['status']}")
-            st.write(f"📅 {row['data']}")
+    for i, row in df.iterrows():
+        st.write(f"### Chamado #{row['id']}")
+        st.write(row["descricao"])
+        st.write(f"{row['solicitante']} | {row['prioridade']} | {row['status']}")
 
-            # BOTÃO FINALIZAR
-            if row["status"] == "Aberto":
-                if st.button(f"Finalizar {row['id']}"):
-                    c.execute("UPDATE chamados SET status='Finalizado' WHERE id=?", (row["id"],))
-                    conn.commit()
-                    st.rerun()
+        if row["status"] == "Aberto":
+            if st.button(f"Finalizar {row['id']}"):
+                c.execute("UPDATE chamados SET status='Finalizado' WHERE id=?", (row["id"],))
+                conn.commit()
+                st.rerun()
 
-            st.divider()
+        st.divider()
